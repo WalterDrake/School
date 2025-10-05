@@ -27,7 +27,47 @@ VARIANT CallMethod(CComPtr<IDispatch> pRequest, const TCHAR* name, VARIANT* pArg
 	return result;
 }
 
+BOOL IsPresenceDebugger()
+{
+	// Check value of BeingDebugged flag in the Process Environment Block (PEB)
+	if (IsDebuggerPresent())
+	{
+		return TRUE;
+	}
+	
+	BOOL isDebuggerPresent = FALSE;
+	if(CheckRemoteDebuggerPresent(GetCurrentProcess(), &isDebuggerPresent))
+	{
+		if (isDebuggerPresent)
+		{
+			return TRUE;
+		}
+	}
+
+	// Use exception to detect attached debugger
+	const TCHAR* outputString = L"Checking for debugger...";
+	ULONG_PTR args[4] = { 0 };
+	args[0] = (ULONG_PTR)((wcslen(outputString) + 1) * sizeof(WCHAR));
+	args[1] = (ULONG_PTR)outputString;
+
+	__try {
+		RaiseException(DBG_PRINTEXCEPTION_WIDE_C, 0, 4, args);
+		return TRUE;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {}
+
+	return FALSE;
+}
+
+
+
 int _tmain(int argc, TCHAR* argv[]) {
+
+	
+	if (IsPresenceDebugger()) {
+		_tprintf(_T("Debugger detected. Exiting...\n"));
+		return 1;
+	}
 
 	// Initialize COM library
 	HRESULT hr = CoInitialize(NULL);
@@ -58,8 +98,8 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 	// Set up arguments in reverse order
 	CComVariant args[3] = { 0 };
-	args[2] = CComVariant(L"GET");         
-	args[1] = CComVariant(argv[1]);        
+	args[2] = CComVariant(L"GET");
+	args[1] = CComVariant(argv[1]);
 	args[0] = CComVariant(VARIANT_FALSE);
 
 	// Open GET request
@@ -130,26 +170,32 @@ int _tmain(int argc, TCHAR* argv[]) {
 		_tprintf(_T("File does not exist: %s\n"), imagePath);
 		return 1;
 	}
+
 	// Persistently open image on startup
 	HKEY hKey;
 	LPCWSTR subKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-	LONG result = RegOpenKeyExW(HKEY_CURRENT_USER, subKey, 0, KEY_SET_VALUE, &hKey);
+	LPCWSTR valueName = L"OpenImage";
+	std::wstring command = L"explorer.exe \"" + std::wstring(imagePath) + L"\"";
+	DWORD type;
+
+	LONG result = RegGetValueW(HKEY_CURRENT_USER, subKey, valueName, RRF_RT_REG_SZ, &type, NULL, NULL);
 	if (result == ERROR_SUCCESS) {
-		LPCWSTR valueName = L"OpenImage";
-		std::wstring command = L"explorer.exe \"" + std::wstring(imagePath) + L"\"";
-
-		result = RegSetValueExW(hKey, valueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(command.c_str()), (DWORD)((wcslen(command.c_str() + 1) * sizeof(wchar_t))));
-		if (result == ERROR_SUCCESS)
-			_tprintf(_T("Successfully added registry value.\n"));
-		else
-			_tprintf(_T("Failed to set registry value. Error code = %ld\n"), result);
-
-		RegCloseKey(hKey);
+		_tprintf(_T("Registry value already exists.\n"));
+		return 0;
 	}
-	else {
+
+	result = RegOpenKeyExW(HKEY_CURRENT_USER, subKey, 0, KEY_SET_VALUE, &hKey);
+	if (result != ERROR_SUCCESS) {
 		_tprintf(_T("Failed to open registry key. Error code = %ld\n"), result);
 		return 1;
 	}
+	result = RegSetValueExW(hKey, valueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(command.c_str()), static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
+	if (result == ERROR_SUCCESS)
+		_tprintf(_T("Successfully added registry value.\n"));
+	else
+		_tprintf(_T("Failed to set registry value. Error code = %ld\n"), result);
+
+	RegCloseKey(hKey);
 
 	// Sleep 10 seconds and exit
 	Sleep(10000);
