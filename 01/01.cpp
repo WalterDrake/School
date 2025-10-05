@@ -87,7 +87,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 
 	// Create full file path
 	TCHAR imagePath[MAX_PATH];
-	_stprintf_s(imagePath, MAX_PATH, _T("%s\\checkme.jpg"), appDataPath);
+	_stprintf_s(imagePath, MAX_PATH, _T("%s\\checkme.png"), appDataPath);
 
 	// Get the response
 	VARIANT response = CallMethod(pRequest, L"ResponseBody", nullptr, 0);
@@ -108,7 +108,7 @@ int _tmain(int argc, TCHAR* argv[]) {
 				DWORD written = 0;
 				WriteFile(hFile, pData, size, &written, nullptr);
 				CloseHandle(hFile);
-				_tprintf(_T("Saved %lu bytes to checkme.jpg\n"), written);
+				_tprintf(_T("Saved %lu bytes to checkme.png\n"), written);
 			}
 			else {
 				_tprintf(_T("Failed to create file. Error code = %lu\n"), GetLastError());
